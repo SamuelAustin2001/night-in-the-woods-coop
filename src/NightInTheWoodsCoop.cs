@@ -14,7 +14,7 @@ using UnityEngine;
 
 namespace NightInTheWoodsCoop
 {
-    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.8")]
+    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.10")]
     public sealed class CoopPlugin : BaseUnityPlugin
     {
         internal static CoopPlugin Instance;
@@ -51,12 +51,21 @@ namespace NightInTheWoodsCoop
         private int _testHostConfirmPackets;
         private int _testUdpSent;
         private int _testUdpReceived;
+        private int _testChoiceCallbacks;
+        private int _testChoiceCallbacksApplied;
+        private string _testChoiceCallbackStatus = "none";
         private bool _guestConfirmHeld;
         private bool _hostConfirmHeld;
         private bool _pendingGuestConfirm;
         private bool _pendingHostConfirm;
         private bool _pendingBotConfirm;
         private bool _waitingChoiceConfirm;
+        private bool _hasDeferredChoiceCallback;
+        private bool _applyingDeferredChoiceCallback;
+        private object _deferredChoiceTarget;
+        private int _deferredLocalChoiceIndex;
+        private string _deferredChoiceNode = "";
+        private float _deferredChoiceDeadline;
         private uint _waitingChoiceCommitId;
         private uint _waitingChoiceSessionId;
         private string _waitingChoiceNode = "";
@@ -244,7 +253,9 @@ namespace NightInTheWoodsCoop
                     "\nconfirmObserved=" + _testConfirmObserved + "\nbotConfirmConsumed=" + _testBotConfirmConsumed +
                     "\nguestConfirmPackets=" + _testGuestConfirmPackets +
                     "\nhostConfirmPackets=" + _testHostConfirmPackets +
-                    "\nudpPacketsSent=" + _testUdpSent + "\nudpPacketsReceived=" + _testUdpReceived + "\nlocalAxis=" +
+                    "\nudpPacketsSent=" + _testUdpSent + "\nudpPacketsReceived=" + _testUdpReceived +
+                    "\nchoiceCallbacks=" + _testChoiceCallbacks + "\nchoiceCallbacksApplied=" + _testChoiceCallbacksApplied +
+                    "\nchoiceCallbackStatus=" + _testChoiceCallbackStatus + "\nlocalAxis=" +
                     _lastLocalInput.Horizontal.ToString("F2", CultureInfo.InvariantCulture) + "," +
                     _lastLocalInput.Vertical.ToString("F2", CultureInfo.InvariantCulture) +
                     "\nsharedAxis=" + sharedInput.Horizontal.ToString("F2", CultureInfo.InvariantCulture) + "," +
@@ -437,17 +448,20 @@ namespace NightInTheWoodsCoop
             catch { }
         }
 
-        private static void DialogueOptionCommitPrefix(ref int __0)
+        private static bool DialogueOptionCommitPrefix(object __instance, ref int __0)
         {
             CoopPlugin plugin = Instance;
-            if (plugin == null || !plugin.Connected) return;
+            if (plugin == null || !plugin.Connected) return true;
+            if (plugin._applyingDeferredChoiceCallback) return true;
+            plugin._testChoiceCallbacks++;
+            plugin._testChoiceCallbackStatus = "local index " + __0;
             string node = "";
             try
             {
                 object dialogue = global::Global.dialogue;
                 node = ReadDialogueNode(dialogue);
             }
-            catch { return; }
+            catch { return true; }
 
             if (plugin.IsHost)
             {
@@ -461,24 +475,85 @@ namespace NightInTheWoodsCoop
                 plugin._hostChoiceCommitSessionId = plugin._hostOptionSessionId;
                 unchecked { plugin._hostChoiceCommitId++; }
                 if (plugin._hostChoiceCommitId == 0) plugin._hostChoiceCommitId = 1;
-                return;
+                plugin._testChoiceCallbacksApplied++;
+                plugin._testChoiceCallbackStatus = "host committed index " + __0 + " session " + plugin._hostChoiceCommitSessionId;
+                return true;
             }
 
-            if (plugin._clientActiveOptionSessionId == 0)
+            if (plugin._hostChoiceCommitId != 0 &&
+                plugin._hostChoiceCommitId != plugin._lastAppliedChoiceCommitId &&
+                SameChoiceSession(plugin._hostOptionSessionId, plugin._hostChoiceCommitSessionId,
+                    plugin._hostOptionNode, plugin._hostChoiceCommitNode) &&
+                SameChoiceNode(node, plugin._hostChoiceCommitNode))
             {
-                if (!SameChoiceSession(plugin._hostOptionSessionId,
-                    plugin._hostChoiceCommitSessionId, node, plugin._hostChoiceCommitNode)) return;
-                plugin._clientActiveOptionSessionId = plugin._hostChoiceCommitSessionId;
+                __0 = plugin._hostChoiceCommitIndex;
+                plugin._lastAppliedChoiceCommitId = plugin._hostChoiceCommitId;
+                plugin._clientActiveOptionSessionId = 0;
+                plugin._testChoiceCallbacksApplied++;
+                plugin._testChoiceCallbackStatus = "guest applied host index " + __0 + " session " + plugin._hostChoiceCommitSessionId;
+                plugin.Logger.LogInfo("Applied host dialogue choice commit " + plugin._lastAppliedChoiceCommitId +
+                    " at index " + __0 + " for option session " + plugin._hostChoiceCommitSessionId);
+                return true;
             }
 
-            if (plugin._hostChoiceCommitId == 0 || plugin._hostChoiceCommitId == plugin._lastAppliedChoiceCommitId ||
-                !SameChoiceSession(plugin._clientActiveOptionSessionId,
-                    plugin._hostChoiceCommitSessionId, node, plugin._hostChoiceCommitNode)) return;
-            __0 = plugin._hostChoiceCommitIndex;
-            plugin._lastAppliedChoiceCommitId = plugin._hostChoiceCommitId;
-            plugin._clientActiveOptionSessionId = 0;
-            plugin.Logger.LogInfo("Applied host dialogue choice commit " + plugin._lastAppliedChoiceCommitId +
-                " at index " + __0 + " for option session " + plugin._hostChoiceCommitSessionId);
+            if (plugin._hasDeferredChoiceCallback)
+            {
+                plugin._testChoiceCallbackStatus = "guest choice callback already waiting for host commit";
+                return false;
+            }
+            plugin._hasDeferredChoiceCallback = true;
+            plugin._deferredChoiceTarget = __instance;
+            plugin._deferredLocalChoiceIndex = __0;
+            plugin._deferredChoiceNode = node;
+            plugin._deferredChoiceDeadline = Time.realtimeSinceStartup + 0.5f;
+            plugin._testChoiceCallbackStatus = "guest choice deferred for host commit; host session " + plugin._hostOptionSessionId;
+            return false;
+        }
+
+        private static bool SameChoiceNode(string left, string right)
+        {
+            return string.Equals(left ?? "", right ?? "", StringComparison.Ordinal);
+        }
+
+        private void TryApplyDeferredChoiceCallback(Packet packet)
+        {
+            if (!_hasDeferredChoiceCallback ||
+                !SameChoiceSession(packet.OptionSessionId, packet.ChoiceCommitSessionId,
+                    packet.OptionNode, packet.ChoiceCommitNode) ||
+                !SameChoiceNode(_deferredChoiceNode, packet.ChoiceCommitNode)) return;
+            CompleteDeferredChoiceCallback(packet.ChoiceCommitIndex, packet.ChoiceCommitId);
+        }
+
+        private void CompleteDeferredChoiceCallback(int choiceIndex, uint commitId)
+        {
+            if (!_hasDeferredChoiceCallback) return;
+            object target = _deferredChoiceTarget;
+            _hasDeferredChoiceCallback = false;
+            _deferredChoiceTarget = null;
+            _applyingDeferredChoiceCallback = true;
+            try
+            {
+                MethodInfo setOption = target == null ? null : AccessTools.Method(
+                    target.GetType(), "SetOption", new Type[] { typeof(int) });
+                if (setOption == null) throw new MissingMethodException("DialogueUI.SetOption(int) is unavailable");
+                setOption.Invoke(target, new object[] { choiceIndex });
+                if (commitId != 0)
+                {
+                    _lastAppliedChoiceCommitId = commitId;
+                    _testChoiceCallbacksApplied++;
+                    _clientActiveOptionSessionId = 0;
+                    _testChoiceCallbackStatus = "guest applied host index " + choiceIndex + " session " + _hostChoiceCommitSessionId;
+                    Logger.LogInfo("Applied deferred host dialogue choice commit " + commitId +
+                        " at index " + choiceIndex + " for option session " + _hostChoiceCommitSessionId);
+                }
+                else _testChoiceCallbackStatus = "guest used local choice after host commit timeout; index " + choiceIndex;
+            }
+            catch (Exception e)
+            {
+                _testChoiceCallbackStatus = "deferred choice invocation failed: " + e.GetType().Name;
+                Logger.LogWarning("Deferred dialogue choice callback failed: " + e.Message);
+            }
+            finally { _applyingDeferredChoiceCallback = false; }
         }
 
         private void ObserveHostOptionActive(bool active)
@@ -717,6 +792,7 @@ namespace NightInTheWoodsCoop
                     _hostChoiceCommitIndex = p.ChoiceCommitIndex;
                     _hostChoiceCommitNode = p.ChoiceCommitNode;
                 }
+                if (newChoiceCommit) TryApplyDeferredChoiceCallback(p);
                 if (p.Variables != null) ApplyStoryVariables(p.Variables);
                 if (p.State.ConfirmDown) _testHostConfirmPackets++;
                 if (p.State.ConfirmDown && !_hostConfirmHeld)
@@ -755,6 +831,8 @@ namespace NightInTheWoodsCoop
                 _pendingHostConfirm = true;
                 _status = "choice commit missing; continuing with local option";
             }
+            if (_hasDeferredChoiceCallback && Time.realtimeSinceStartup >= _deferredChoiceDeadline)
+                CompleteDeferredChoiceCallback(_deferredLocalChoiceIndex, 0);
         }
 
         private bool TryReceive(out byte[] bytes, out IPEndPoint from)
