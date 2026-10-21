@@ -14,7 +14,7 @@ using UnityEngine;
 
 namespace NightInTheWoodsCoop
 {
-    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.6")]
+    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.8")]
     public sealed class CoopPlugin : BaseUnityPlugin
     {
         internal static CoopPlugin Instance;
@@ -49,6 +49,8 @@ namespace NightInTheWoodsCoop
         private int _testBotConfirmConsumed;
         private int _testGuestConfirmPackets;
         private int _testHostConfirmPackets;
+        private int _testUdpSent;
+        private int _testUdpReceived;
         private bool _guestConfirmHeld;
         private bool _hostConfirmHeld;
         private bool _pendingGuestConfirm;
@@ -135,8 +137,10 @@ namespace NightInTheWoodsCoop
                 }
                 else
                 {
+                    _socket.Bind(new IPEndPoint(IPAddress.Any, 0));
                     _host = new IPEndPoint(IPAddress.Parse(EnvironmentValue("NITW_COOP_HOST", _hostAddress.Value)), PortValue());
                     _status = "connecting to " + _host;
+                    Logger.LogInfo("Bound client UDP socket to " + _socket.LocalEndPoint);
                 }
             }
             catch (Exception e)
@@ -239,7 +243,8 @@ namespace NightInTheWoodsCoop
                     "\nscene=" + scene + "\nframe=" + Time.frameCount + "\nbot=" + _botStatus +
                     "\nconfirmObserved=" + _testConfirmObserved + "\nbotConfirmConsumed=" + _testBotConfirmConsumed +
                     "\nguestConfirmPackets=" + _testGuestConfirmPackets +
-                    "\nhostConfirmPackets=" + _testHostConfirmPackets + "\nlocalAxis=" +
+                    "\nhostConfirmPackets=" + _testHostConfirmPackets +
+                    "\nudpPacketsSent=" + _testUdpSent + "\nudpPacketsReceived=" + _testUdpReceived + "\nlocalAxis=" +
                     _lastLocalInput.Horizontal.ToString("F2", CultureInfo.InvariantCulture) + "," +
                     _lastLocalInput.Vertical.ToString("F2", CultureInfo.InvariantCulture) +
                     "\nsharedAxis=" + sharedInput.Horizontal.ToString("F2", CultureInfo.InvariantCulture) + "," +
@@ -762,6 +767,7 @@ namespace NightInTheWoodsCoop
                 EndPoint endpoint = from;
                 byte[] buffer = new byte[1200];
                 int size = _socket.ReceiveFrom(buffer, ref endpoint);
+                _testUdpReceived++;
                 bytes = new byte[size];
                 Buffer.BlockCopy(buffer, 0, bytes, 0, size);
                 from = (IPEndPoint)endpoint;
@@ -777,7 +783,7 @@ namespace NightInTheWoodsCoop
 
         private void Send(IPEndPoint endpoint, byte[] packet)
         {
-            try { if (_socket != null && endpoint != null) _socket.SendTo(packet, endpoint); }
+            try { if (_socket != null && endpoint != null) { _socket.SendTo(packet, endpoint); _testUdpSent++; } }
             catch (Exception e) { Logger.LogWarning("UDP send error: " + e.Message); }
         }
 
