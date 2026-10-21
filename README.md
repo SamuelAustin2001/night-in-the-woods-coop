@@ -26,15 +26,17 @@ The preloader redirects `Continuity` save paths to `BepInEx/config/NightInTheWoo
 
 ## QA status
 
-One-off bot-driven two-client loopback checks have demonstrated scene following, movement in selected scenes, numeric story-variable snapshots, and receipt/application of one opening-scene choice commit. These checks do not establish a complete co-op playthrough.
+One-off bot-driven two-client loopback checks on v0.6.8 (2026-10-21) demonstrated a connected host/client pair, host scene following, both participants moving the same Mae, host-authoritative numeric story-variable snapshots, and host confirmation reaching `Global.IsConfirmOrInteractDown`. These checks do not establish a complete co-op playthrough.
+
+In a fresh-save run, the guest confirmed through `Title` and both clients reached `IntroPoem` with matching `Continuity.vars` hash `236FB091`. A host confirmation was consumed by the game hook (`botConfirmConsumed=1`). The run produced a host choice commit, but the guest's `lastAppliedChoiceCommitId` remained `0`; the selected branch and scripted effects were not verified. In a separate connected run, host and guest movement both moved the same Mae; the guest's movement also led to both clients following a scene change. Scene transitions briefly produced different story-variable hashes; a later snapshot converged them. A Playground interaction pulse did not open a Yarn option menu.
 
 Failures and unresolved results:
 
-- A host confirmation at the title screen was observed by the guest but did not advance the host.
+- An earlier host confirmation at the title screen was observed by the guest but did not advance the host. In the latest fresh-save run, a guest confirmation did advance both clients from `Title` to `IntroPoem`.
 - In `MaeHouse`, a left-movement pulse did not move Mae, and host/guest interaction did not open a Yarn option menu; the cause is unknown.
 - An earlier `MaeRoom` variable mutation produced a whole-dictionary hash mismatch for at least six seconds before a later snapshot/test state caught up. The run is not evidence of immediate consistency.
-- The latest fresh launch attempt did not connect the peers; the guest logged `UDP receive error: An invalid argument was supplied.`
-- A live opening-scene test logged that the guest applied one host choice commit at index 0. The resulting selected branch and scripted effects were not verified.
+- Before v0.6.8, the guest logged `UDP receive error: An invalid argument was supplied.` The client socket now binds to an ephemeral local UDP port; v0.6.8 connected over loopback. Real LAN/VPN behavior has not been tested.
+- An earlier opening-scene test logged that the guest applied one host choice commit at index 0. In the latest fresh-save check, the guest did not report applying the host commit. Choice synchronization is unresolved, and the resulting branch and scripted effects have not been verified.
 
 No maintained automated suite has been run. Normal dialogue choices, scripted events, persistent journal/counter state, save progression, packet loss, reconnection, and LAN/VPN play remain unverified. Treat the prototype as not yet playable co-op.
 
