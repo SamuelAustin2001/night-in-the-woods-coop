@@ -376,3 +376,8 @@ A v0.6.191 guest-initiated Phone follow-up tested the natural in-world guest Int
 
 
 A later v0.6.191 guest Mural follow-up completed `visitors` and `forest`, synchronizing `bus_station_mural` from 1→2→3 with matching hashes and acknowledged host lines. The third guest Interact started `mine`, but this run stalled: host sequence 43/fingerprint `8518993B`, guest acknowledgement 42 with pending local fingerprint `7D4A8B84`. Both runners remained active through six passive seconds; no more gameplay input was sent after the mismatch. An earlier v0.6.190 same-PC run had completed the mine branch, so this v0.6.191 result is unresolved and prevents claiming reliable Mural progression. Evidence was kept in local status/log captures; no game data is included.
+
+
+## v0.6.192 Mural dialogue advance follow-up
+
+A retry check now re-evaluates guest advancement when the host repeats its current dialogue event. In a fresh same-PC loopback run, guest Interact completed Mural `visitors`, `forest`, and `mine`; the client acknowledged mine through host event 14. Both Yarn snapshots advanced `bus_station_mural` from 1 to 3 and set `bus_station_mural_done=1`. Both runners stopped in BusStation with matching hash `61D56A86` (316 variables), and a five-second passive sample remained connected and hash-matched. This clears the v0.6.191 mine-line mismatch in this run only; the underlying race is still inferred. Remote machines, ordinary controls, repeated-run reliability, saves/reconnects, and a full playthrough remain unverified. No game files or compiled binaries are included.
