@@ -401,3 +401,7 @@ A v0.6.193 host QA scene load also moved both loopback clients from BusStation t
 A follow-up exterior movement check used one host-right pulse and guest approach/retreat pulses. Host moved x=16.000→16.925; guest approached to x=16.175, 0.750 units away, where the separation-block counter rose 29→34, then moved back to x=15.824. Both remained connected with visible reciprocal puppets and matching hash `EA3BDCC0` through a three-second passive sample. This is one synthetic soft-separation edge sample.
 
 An exploratory guest bot walk from x=15.824 to x=-0.466 stayed in BusStationExterior. Interact at x=15.824 and x=1.280 queued no Yarn request; this did not identify the natural exit and does not prove none exists. The guest was moved back to x=16.175 beside host x=16.925 at the 0.750-unit separation edge; both remained connected with reciprocal puppets and hash `EA3BDCC0` through three seconds.
+
+
+
+A v0.6.193 same-PC loopback check sampled one QA-bot jump from each peer in BusStationExterior. For each direction, the remote Mae briefly appeared at y≈-0.7 with the jumping Animator hash `7E96FE10` on the receiving puppet, then returned to y≈-2.27 and idle hash `541848F6` after about 700 ms. Both stayed connected; story hashes converged at `C91DC859` after the host jump. This is one synthetic pulse per direction and status evidence only; normal controls, repeated reliability, frame-by-frame visual parity, and remote-PC/LAN/VPN play remain unverified. Evidence summary: local `work/qa-runs/run-v06193-bidirectional-jump-sync-20261102/summary.md`.
