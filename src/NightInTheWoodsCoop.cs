@@ -15,7 +15,7 @@ using UnityEngine;
 
 namespace NightInTheWoodsCoop
 {
-    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.190")]
+    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.191")]
     public sealed class CoopPlugin : BaseUnityPlugin
     {
         private const float RemotePuppetRedTint = 0.78f;
@@ -2924,6 +2924,14 @@ namespace NightInTheWoodsCoop
                 Logger.LogInfo("QA bot confirm signaled active DialogueImplementation.OnNext count=" + signaled);
             return signaled;
         }
+        private bool CanAcceptBotConfirm()
+        {
+            string sceneName = Application.loadedLevelName;
+            if (string.Equals(sceneName, "Title", StringComparison.Ordinal) ||
+                string.Equals(sceneName, "IntroPoem", StringComparison.Ordinal)) return true;
+            if (HasRunningDialogue() || _hostOptionsActive) return true;
+            return IsClient && ClientOptionIteratorActive();
+        }
         private void ApplyBotInput(InputState state)
         {
             try
@@ -2993,23 +3001,31 @@ namespace NightInTheWoodsCoop
                     }
                     else if (string.Equals(command, "confirm", StringComparison.OrdinalIgnoreCase))
                     {
-                        // A dialogue confirm is not an interaction. Echoing an Interact
-                        // edge from the host can make the guest replay the same interaction.
-                        _botInteractFrame = HasRunningDialogue() ? -1 : Time.frameCount + 1;
-                        _botConfirmFrames = IsHost ? 4 : 0;
-                        _botConfirmUntil = IsHost ? 0f : Time.realtimeSinceStartup + 0.15f;
-                        _pendingBotConfirm = true;
-                        _pendingBotIntroPoemConfirm = string.Equals(Application.loadedLevelName, "IntroPoem", StringComparison.Ordinal);
-                        if (_pendingBotIntroPoemConfirm) _testIntroPoemConfirmStatus = "confirm queued for IntroPoemBrain";
-                        if (IsHost && _hostOptionsActive) _dialogueConfirmPending = true;
-                                                bool optionConfirm = IsHost ? _hostOptionsActive : ClientOptionIteratorActive();
-                        int signaledDialogueNext = optionConfirm ? 0 : SignalBotDialogueNext();
-                        if (optionConfirm)
+                        if (!CanAcceptBotConfirm())
                         {
-                            Logger.LogInfo("QA bot choice confirm skipped DialogueImplementation.OnNext so it cannot move the option cursor");
-                            _botStatus = "choice confirm queued; skipped DialogueImplementation.OnNext";
+                            _botStatus = "rejected confirm: no active dialogue or title input";
+                            Logger.LogInfo("QA bot confirm rejected outside active dialogue, choice menu, Title, or IntroPoem");
                         }
-                        else _botStatus = "confirm queued; DialogueImplementation.OnNext=" + signaledDialogueNext;
+                        else
+                        {
+                            // A dialogue confirm is not an interaction. Echoing an Interact
+                            // edge from the host can make the guest replay the same interaction.
+                            _botInteractFrame = HasRunningDialogue() ? -1 : Time.frameCount + 1;
+                            _botConfirmFrames = IsHost ? 4 : 0;
+                            _botConfirmUntil = IsHost ? 0f : Time.realtimeSinceStartup + 0.15f;
+                            _pendingBotConfirm = true;
+                            _pendingBotIntroPoemConfirm = string.Equals(Application.loadedLevelName, "IntroPoem", StringComparison.Ordinal);
+                            if (_pendingBotIntroPoemConfirm) _testIntroPoemConfirmStatus = "confirm queued for IntroPoemBrain";
+                            if (IsHost && _hostOptionsActive) _dialogueConfirmPending = true;
+                            bool optionConfirm = IsHost ? _hostOptionsActive : ClientOptionIteratorActive();
+                            int signaledDialogueNext = optionConfirm ? 0 : SignalBotDialogueNext();
+                            if (optionConfirm)
+                            {
+                                Logger.LogInfo("QA bot choice confirm skipped DialogueImplementation.OnNext so it cannot move the option cursor");
+                                _botStatus = "choice confirm queued; skipped DialogueImplementation.OnNext";
+                            }
+                            else _botStatus = "confirm queued; DialogueImplementation.OnNext=" + signaledDialogueNext;
+                        }
                     }
                     else if (command.StartsWith("move_left:", StringComparison.OrdinalIgnoreCase) ||
                         command.StartsWith("move_right:", StringComparison.OrdinalIgnoreCase) ||
