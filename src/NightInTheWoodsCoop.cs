@@ -15,7 +15,7 @@ using UnityEngine;
 
 namespace NightInTheWoodsCoop
 {
-    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.193")]
+    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.195")]
     public sealed class CoopPlugin : BaseUnityPlugin
     {
         private const float RemotePuppetRedTint = 0.78f;
@@ -241,6 +241,8 @@ namespace NightInTheWoodsCoop
         private string _guestInteractionStatus = "idle";
         private string _playerInteractionCompletionStatus = "idle";
         private int _playerInteractionCompletionStatusFrame = -1;
+        private string _lastLoggedLocalPlayerState = "";
+        private int _lastLoggedLocalPlayerInstanceId;
         private bool _playerInteractionCleanupPending;
         private int _playerInteractionCleanupAttempts;
         private int _playerInteractionCleanupLastAttemptFrame = -1;
@@ -250,6 +252,7 @@ namespace NightInTheWoodsCoop
         // A guest interaction coroutine may call Dialogue.Run again after host cleanup.
         // Only a fresh local Interact edge may arm another request.
         private bool _guestInteractionCaptureArmed;
+        private float _guestInteractionCaptureArmDeadline;
         private readonly Dictionary<object, bool> _guestInteractionCaptureConsumed = new Dictionary<object, bool>();
         private global::Player _puppetSource;
         private GameObject _remotePuppetRoot;
@@ -819,13 +822,25 @@ namespace NightInTheWoodsCoop
                 global::Player player = UnityEngine.Object.FindObjectOfType(typeof(global::Player)) as global::Player;
                 if (player != null)
                 {
+                    string playerState = PlayerStateName(player);
+                    int playerInstanceId = player.GetInstanceID();
+                    if (playerInstanceId != _lastLoggedLocalPlayerInstanceId ||
+                        !string.Equals(playerState, _lastLoggedLocalPlayerState, StringComparison.Ordinal))
+                    {
+                        Logger.LogInfo("Local Player state changed: frame=" + Time.frameCount +
+                            " instance=" + playerInstanceId + " state=" + playerState +
+                            " cleanupPending=" + _playerInteractionCleanupPending +
+                            " dialogueRunning=" + HasRunningDialogue());
+                        _lastLoggedLocalPlayerInstanceId = playerInstanceId;
+                        _lastLoggedLocalPlayerState = playerState;
+                    }
                     Vector3 position = player.transform.position;
                     line += "player=" + position.x.ToString("F3", CultureInfo.InvariantCulture) + "," +
                         position.y.ToString("F3", CultureInfo.InvariantCulture) + "," +
                         position.z.ToString("F3", CultureInfo.InvariantCulture) + "\n" +
                         "playerControl=" + player.canMove + "," + player.movementEnabled + "," + player.moveState + "\n" +
                         "playerInstanceId=" + player.GetInstanceID() + "\n" +
-                        "playerState=" + PlayerStateName(player) + "\n" +
+                        "playerState=" + playerState + "\n" +
                         "globalPlayerInstanceId=" + (global::Global.player == null ? "none" : global::Global.player.GetInstanceID().ToString()) + "\n" +
                         "globalPlayerState=" + PlayerStateName(global::Global.player) + "\n" +
                         "playerReferencesMatch=" + object.ReferenceEquals(player, global::Global.player) + "\n" +
@@ -1929,6 +1944,7 @@ namespace NightInTheWoodsCoop
             }
             if (iterator != null) _guestInteractionCaptureConsumed.Add(iterator, true);
             _guestInteractionCaptureArmed = false;
+            _guestInteractionCaptureArmDeadline = 0f;
             if (asset == null || string.IsNullOrEmpty(node))
             {
                 _guestInteractionStatus = "guest interaction missing asset or node; suppressed";
@@ -3287,8 +3303,29 @@ namespace NightInTheWoodsCoop
 
         private void ProcessPendingPlayerInteractionCleanup(global::Player player)
         {
-            if ((!IsClient && !IsHost) || !_playerInteractionCleanupPending || player == null ||
-                !object.ReferenceEquals(player, global::Global.player) || HasRunningDialogue() ||
+            if ((!IsClient && !IsHost) || player == null ||
+                !object.ReferenceEquals(player, global::Global.player)) return;
+            if (!_playerInteractionCleanupPending && IsClient && _guestInteractionCaptureArmed &&
+                _guestInteractionCaptureArmDeadline > 0f &&
+                Time.realtimeSinceStartup >= _guestInteractionCaptureArmDeadline &&
+                _pendingClientInteractionRequestId == 0 && !HasRunningDialogue() &&
+                !global::Global.isInitializingLevel)
+            {
+                string armedState = PlayerStateName(player);
+                _guestInteractionCaptureArmed = false;
+                _guestInteractionCaptureArmDeadline = 0f;
+                if (string.Equals(armedState, "Interact", StringComparison.Ordinal) ||
+                    string.Equals(armedState, "PreInteract", StringComparison.Ordinal))
+                {
+                    Logger.LogWarning("Fresh guest Interact produced no Yarn request; scheduling stuck-state cleanup");
+                    SchedulePlayerInteractionCleanup();
+                }
+                else
+                {
+                    Logger.LogInfo("Fresh guest Interact capture expired without Yarn; state=" + armedState);
+                }
+            }
+            if (!_playerInteractionCleanupPending || HasRunningDialogue() ||
                 global::Global.isInitializingLevel) return;
             if (_playerInteractionCleanupLastAttemptFrame == Time.frameCount) return;
             _playerInteractionCleanupLastAttemptFrame = Time.frameCount;
@@ -3591,6 +3628,7 @@ namespace NightInTheWoodsCoop
             _capturingGuestInteractionIterator = null;
             _capturingGuestPlayerInteraction = false;
             _guestInteractionCaptureArmed = false;
+            _guestInteractionCaptureArmDeadline = 0f;
             _guestInteractHeld = false;
             _pendingGuestInteract = false;
             _pendingGuestInteractDeadline = 0f;
@@ -4249,6 +4287,7 @@ namespace NightInTheWoodsCoop
                 if (freshGuestInteract && !p._guestInteractionCaptureArmed)
                 {
                     p._guestInteractionCaptureArmed = true;
+                    p._guestInteractionCaptureArmDeadline = Time.realtimeSinceStartup + 1.5f;
                     p.Logger.LogInfo("Re-armed guest interaction capture after fresh Interact input");
                 }
                 return;
