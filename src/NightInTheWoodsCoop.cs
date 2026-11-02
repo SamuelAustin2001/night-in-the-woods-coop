@@ -15,7 +15,7 @@ using UnityEngine;
 
 namespace NightInTheWoodsCoop
 {
-    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.192")]
+    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.193")]
     public sealed class CoopPlugin : BaseUnityPlugin
     {
         private const float RemotePuppetRedTint = 0.78f;
@@ -3491,19 +3491,18 @@ namespace NightInTheWoodsCoop
                     {
                         string requestedAsset = p.InteractionAsset ?? "";
                         string requestedNode = p.InteractionNode ?? "";
-                        bool alreadyStartedByMirroredInput = _hostDialogueStartedByMirroredGuestInteract &&
-                            HasRunningDialogue() &&
+                        bool alreadyRunningDialogue = HasRunningDialogue() &&
                             string.Equals(_hostDialogueAsset, requestedAsset, StringComparison.Ordinal) &&
                             string.Equals(_hostDialogueNode, requestedNode, StringComparison.Ordinal);
-                        if (alreadyStartedByMirroredInput)
+                        if (alreadyRunningDialogue)
                         {
                             _lastGuestInteractionRequestId = p.InteractionRequestId;
                             _pendingGuestInteractionRequestId = 0;
                             _pendingGuestInteractionAsset = "";
                             _pendingGuestInteractionNode = "";
                             _guestInteractionStatus = "acknowledged request=" + p.InteractionRequestId +
-                                "; dialogue already started by mirrored guest input";
-                            Logger.LogInfo("Acknowledged guest Yarn request already started by mirrored Interact input: request=" +
+                                "; matching host dialogue already running";
+                            Logger.LogInfo("Acknowledged guest Yarn request already covered by matching host dialogue: request=" +
                                 p.InteractionRequestId + " asset=" + requestedAsset + " node=" + requestedNode);
                         }
                         else
