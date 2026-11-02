@@ -15,7 +15,7 @@ using UnityEngine;
 
 namespace NightInTheWoodsCoop
 {
-    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.191")]
+    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.192")]
     public sealed class CoopPlugin : BaseUnityPlugin
     {
         private const float RemotePuppetRedTint = 0.78f;
@@ -214,6 +214,7 @@ namespace NightInTheWoodsCoop
         private readonly Dictionary<string, uint> _clientDialogueLineAcks = new Dictionary<string, uint>(StringComparer.Ordinal);
         private readonly Dictionary<string, uint> _lastAppliedHostDialogueLineSequences = new Dictionary<string, uint>(StringComparer.Ordinal);
         private readonly Dictionary<string, DialogueLineEvent> _hostDialogueLineEvents = new Dictionary<string, DialogueLineEvent>(StringComparer.Ordinal);
+        private readonly Dictionary<string, DialogueLineEvent> _previousHostDialogueLineEvents = new Dictionary<string, DialogueLineEvent>(StringComparer.Ordinal);
         private readonly Dictionary<string, uint> _claimedHostDialogueLineSequences = new Dictionary<string, uint>(StringComparer.Ordinal);
         private uint _clientDialogueLineAck;
         private uint _lastAppliedHostDialogueLineSequence;
@@ -2138,6 +2139,33 @@ namespace NightInTheWoodsCoop
                 claimed != lineEvent.Sequence;
         }
 
+        private void TryQueueGuestAdvanceToHostLine(DialogueLineEvent incomingLine, uint dialogueRunId)
+        {
+            if (incomingLine == null || dialogueRunId == 0 ||
+                !string.Equals(incomingLine.Stream, "DialogueUI@Global", StringComparison.Ordinal) ||
+                _hostGlobalDialogueLineRunId != dialogueRunId || _lastAppliedHostDialogueRunId != dialogueRunId)
+                return;
+
+            DialogueLineEvent previousLine;
+            if (!_previousHostDialogueLineEvents.TryGetValue(incomingLine.Stream, out previousLine) || previousLine == null ||
+                !IsNewer(incomingLine.Sequence, previousLine.Sequence) ||
+                _lastGuestAutoAdvanceHostLineSequence == incomingLine.Sequence)
+                return;
+
+            uint appliedSequence;
+            if (!_lastAppliedHostDialogueLineSequences.TryGetValue(incomingLine.Stream, out appliedSequence) ||
+                appliedSequence != previousLine.Sequence ||
+                !string.Equals(_pendingGuestDialogueLineFingerprint, previousLine.Fingerprint, StringComparison.Ordinal) ||
+                string.Equals(_pendingGuestDialogueLineFingerprint, incomingLine.Fingerprint, StringComparison.Ordinal))
+                return;
+
+            _lastGuestAutoAdvanceHostLineSequence = incomingLine.Sequence;
+            _pendingHostDialogueConfirm = true;
+            _pendingHostGlobalConfirm = ShouldMirrorHostConfirmToGlobalCoroutine();
+            _testDialogueConfirmDiagnostics = "auto-advance guest to host line sequence=" + incomingLine.Sequence;
+            Logger.LogInfo("Auto-advancing guest dialogue after host advanced to global line " + incomingLine.Sequence);
+        }
+
         private void ClaimDialogueLine(DialogueLineEvent lineEvent)
         {
             if (lineEvent != null) _claimedHostDialogueLineSequences[lineEvent.Stream] = lineEvent.Sequence;
@@ -3547,6 +3575,7 @@ namespace NightInTheWoodsCoop
             _lastAppliedHostDialogueLineSequences.Clear();
             _claimedHostDialogueLineSequences.Clear();
             _hostDialogueLineEvents.Clear();
+            _previousHostDialogueLineEvents.Clear();
             _hostGlobalDialogueLineRunId = 0;
             _clientDialogueLineAck = 0;
             GuestInput.Clear();
@@ -3603,6 +3632,7 @@ namespace NightInTheWoodsCoop
             _lastAppliedHostDialogueLineSequences.Clear();
             _claimedHostDialogueLineSequences.Clear();
             _hostDialogueLineEvents.Clear();
+            _previousHostDialogueLineEvents.Clear();
             _hostDialogueLineSequence = 0;
             _hostGlobalDialogueLineSequence = 0;
             _hostDialogueLineFingerprint = "";
@@ -3770,30 +3800,18 @@ namespace NightInTheWoodsCoop
                         IsNewer(incomingLine.Sequence, previousLine.Sequence);
                     if (isNewEvent)
                     {
+                        if (previousLine != null)
+                            _previousHostDialogueLineEvents[incomingLine.Stream] = previousLine;
+                        else
+                            _previousHostDialogueLineEvents.Remove(incomingLine.Stream);
                         _hostDialogueLineEvents[incomingLine.Stream] = incomingLine;
-                        if (!newHostDialogueRun &&
-                            string.Equals(incomingLine.Stream, "DialogueUI@Global", StringComparison.Ordinal) && previousLine != null &&
-                            _hostGlobalDialogueLineRunId == p.DialogueRunId &&
-                            _lastAppliedHostDialogueRunId == p.DialogueRunId)
-                        {
-                            uint previouslyAppliedSequence;
-                            if (_lastAppliedHostDialogueLineSequences.TryGetValue(incomingLine.Stream, out previouslyAppliedSequence) &&
-                                previouslyAppliedSequence == previousLine.Sequence &&
-                                IsNewer(incomingLine.Sequence, previouslyAppliedSequence) &&
-                                string.Equals(_pendingGuestDialogueLineFingerprint, previousLine.Fingerprint, StringComparison.Ordinal) &&
-                                !string.Equals(_pendingGuestDialogueLineFingerprint, incomingLine.Fingerprint, StringComparison.Ordinal) &&
-                                _lastGuestAutoAdvanceHostLineSequence != incomingLine.Sequence)
-                            {
-                                _lastGuestAutoAdvanceHostLineSequence = incomingLine.Sequence;
-                                _pendingHostDialogueConfirm = true;
-                                _pendingHostGlobalConfirm = ShouldMirrorHostConfirmToGlobalCoroutine();
-                                _testDialogueConfirmDiagnostics = "auto-advance guest to host line sequence=" + incomingLine.Sequence;
-                                Logger.LogInfo("Auto-advancing guest dialogue after host advanced to global line " + incomingLine.Sequence);
-                            }
-                        }
                         Logger.LogInfo("Received host dialogue line event: " + incomingLine.Stream + "#" +
                             incomingLine.Sequence + "/" + incomingLine.Fingerprint + " packet=" + p.Sequence);
                     }
+                    // A host line can arrive before the guest finishes applying the previous
+                    // one. Recheck this edge on every packet carrying the current event so a
+                    // late guest acknowledgement does not leave its dialogue coroutine stuck.
+                    TryQueueGuestAdvanceToHostLine(incomingLine, p.DialogueRunId);
                     if (string.Equals(incomingLine.Stream, "DialogueUI@Global", StringComparison.Ordinal) &&
                         _lastAppliedHostDialogueRunId == p.DialogueRunId)
                         _hostGlobalDialogueLineRunId = p.DialogueRunId;
