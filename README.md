@@ -373,3 +373,6 @@ A same-PC loopback run loaded v0.6.191 in both isolated copies. The host advance
 
 
 A v0.6.191 guest-initiated Phone follow-up tested the natural in-world guest Interact path. The host accepted the request and both clients entered `whosteals`; the guest confirmed during the host dialogue, the client applied and acknowledged host line events through sequence 35, and both Yarn snapshots set `bus_station_phone_done=1`. Both runners stopped in BusStation with matching hash `E035649E` (317 variables), then remained connected and idle through five passive seconds. This is one same-PC bot run; regular physical controls, remote machines, saves, reconnects and full progression remain unverified.
+
+
+A later v0.6.191 guest Mural follow-up completed `visitors` and `forest`, synchronizing `bus_station_mural` from 1→2→3 with matching hashes and acknowledged host lines. The third guest Interact started `mine`, but this run stalled: host sequence 43/fingerprint `8518993B`, guest acknowledgement 42 with pending local fingerprint `7D4A8B84`. Both runners remained active through six passive seconds; no more gameplay input was sent after the mismatch. An earlier v0.6.190 same-PC run had completed the mine branch, so this v0.6.191 result is unresolved and prevents claiming reliable Mural progression. Evidence was kept in local status/log captures; no game data is included.
