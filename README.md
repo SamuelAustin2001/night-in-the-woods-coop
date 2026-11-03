@@ -1,6 +1,6 @@
 # Night in the Woods Co-op prototype
 
-A BepInEx host/client prototype for the original Windows x64 Steam release of *Night in the Woods* (build 5940043, Unity 5.6.2p4, Mono). The public source now contains candidate v0.6.195. It is experimental software, not a finished or verified playable co-op mod.
+A BepInEx host/client prototype for the original Windows x64 Steam release of *Night in the Woods* (build 5940043, Unity 5.6.2p4, Mono). The public source now contains candidate v0.6.196. It is experimental software, not a finished or verified playable co-op mod.
 
 In a fresh-save v0.6.190 same-PC loopback run, two isolated clients moved independent Maes with visible remote puppets and synchronized the BusStation opening, both Janitor `excuse` choices, Phone/reception and whosteals, VendingMachine, and the Mural `visitors`, `forest` and `mine` branches. Dialogue line events were acknowledged and tested story variables converged; a four-sample passive soak stayed connected and hash-matched. The Mural `wow` branch was covered in an earlier v0.6.143 run. This is bot-driven local evidence only. Another computer, normal player controls, LAN/VPN play, save/restart behavior, and a full story run are not verified. This repository contains source and instructions, not game data or a packaged release.
 
@@ -424,3 +424,8 @@ v0.6.196 adds status diagnostics for peer endpoint, packet sequence and last-pac
 ## v0.6.196 guest Janitor option-1 choice synchronization
 
 On the same isolated pair, host QA started the BusStation `excuse` node. Both clients reached option session 1; guest QA `choice_next` moved both to index 1 (“So are you the Janitor or something?”). Guest confirm created host commit 1/session 1/index 1, which the guest applied. Both followed `something`; the guest received host dialogue through global line 25 and applied the end marker. Both remained connected, dialogue-stopped and story-hash-matched at `F0366C48` through a 20-second passive sample. This is synthetic same-PC QA; natural Janitor activation and ordinary controls remain unverified.
+
+
+## v0.6.196 Janitor option-0 choice follow-up
+
+In option session 2, guest QA confirmed index 0. Host commit 2/session 2/index 0 (“Isn't there supposed to be someone at the desk?”) was applied by the guest, and both followed `someone`. The guest received host dialogue through line 33 and applied end marker 26. Both returned to stopped/Normal and stayed connected and hash-matched at `F0366C48` during a 20-second passive sample. Along with the earlier option-1 check, both Janitor choice outcomes completed on v0.6.196. Same-PC synthetic QA only; natural NPC activation and ordinary controls remain unverified.
