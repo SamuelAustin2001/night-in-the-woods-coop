@@ -15,7 +15,7 @@ using UnityEngine;
 
 namespace NightInTheWoodsCoop
 {
-    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.195")]
+    [BepInPlugin("coop-anything.nitw", "Night in the Woods Co-op", "0.6.196")]
     public sealed class CoopPlugin : BaseUnityPlugin
     {
         private const float RemotePuppetRedTint = 0.78f;
@@ -759,6 +759,11 @@ namespace NightInTheWoodsCoop
                     "\nguestConfirmPackets=" + _testGuestConfirmPackets +
                     "\nhostConfirmPackets=" + _testHostConfirmPackets +
                     "\nudpPacketsSent=" + _testUdpSent + "\nudpPacketsReceived=" + _testUdpReceived +
+                    "\ntransportPeer=" + (_peer != null ? _peer.ToString() : (_host != null ? _host.ToString() : "none")) +
+                    "\nhostSendSequence=" + (IsHost ? _sequence : 0) +
+                    "\nclientLastHostPacketSequence=" + (!IsHost ? _lastSequence : 0) +
+                    "\nlastHostPacketAgeMs=" + (!IsHost && _lastHostPacket > 0f ? ((Time.realtimeSinceStartup - _lastHostPacket) * 1000f).ToString("F0", CultureInfo.InvariantCulture) : "-1") +
+                    "\nlastGuestPacketAgeMs=" + (IsHost && _lastGuestPacket > 0f ? ((Time.realtimeSinceStartup - _lastGuestPacket) * 1000f).ToString("F0", CultureInfo.InvariantCulture) : "-1") +
                     "\nchoiceCallbacks=" + _testChoiceCallbacks + "\nchoiceCallbacksApplied=" + _testChoiceCallbacksApplied +
                     "\nchoiceCallbackStatus=" + _testChoiceCallbackStatus +
                     "\ndialogueRunner=" + DialogueRunnerStatus() +
